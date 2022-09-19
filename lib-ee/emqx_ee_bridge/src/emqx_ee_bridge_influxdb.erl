@@ -111,22 +111,31 @@ fields("post_udp") ->
     method_fileds(post, influxdb_udp);
 fields("post_api_v1") ->
     method_fileds(post, influxdb_api_v1);
-fields("post_api_v2") ->
-    method_fileds(post, influxdb_api_v2);
+fields("post_api_v2_token") ->
+    method_fileds(post, influxdb_api_v2_token);
+fields("post_api_v2_username") ->
+    method_fileds(post, influxdb_api_v2_username);
 fields("put_udp") ->
     method_fileds(put, influxdb_udp);
 fields("put_api_v1") ->
     method_fileds(put, influxdb_api_v1);
-fields("put_api_v2") ->
-    method_fileds(put, influxdb_api_v2);
+fields("put_api_v2_token") ->
+    method_fileds(put, influxdb_api_v2_token);
+fields("put_api_v2_username") ->
+    method_fileds(put, influxdb_api_v2_username);
 fields("get_udp") ->
     method_fileds(get, influxdb_udp);
 fields("get_api_v1") ->
     method_fileds(get, influxdb_api_v1);
-fields("get_api_v2") ->
-    method_fileds(get, influxdb_api_v2);
+fields("get_api_v2_token") ->
+    method_fileds(get, influxdb_api_v2_token);
+fields("get_api_v2_username") ->
+    method_fileds(get, influxdb_api_v2_username);
 fields(Type) when
-    Type == influxdb_udp orelse Type == influxdb_api_v1 orelse Type == influxdb_api_v2
+    Type == influxdb_udp orelse
+        Type == influxdb_api_v1 orelse
+        Type == influxdb_api_v2_token orelse
+        Type == influxdb_api_v2_username
 ->
     influxdb_bridge_common_fields() ++
         connector_fields(Type).
@@ -169,7 +178,9 @@ desc(influxdb_udp) ->
     ?DESC(emqx_ee_connector_influxdb, "influxdb_udp");
 desc(influxdb_api_v1) ->
     ?DESC(emqx_ee_connector_influxdb, "influxdb_api_v1");
-desc(influxdb_api_v2) ->
+desc(influxdb_api_v2_token) ->
+    ?DESC(emqx_ee_connector_influxdb, "influxdb_api_v2");
+desc(influxdb_api_v2_username) ->
     ?DESC(emqx_ee_connector_influxdb, "influxdb_api_v2");
 desc(_) ->
     undefined.

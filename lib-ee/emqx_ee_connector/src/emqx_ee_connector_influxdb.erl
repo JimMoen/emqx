@@ -123,12 +123,20 @@ fields(influxdb_api_v1) ->
             {username, mk(binary(), #{desc => ?DESC("username")})},
             {password, mk(binary(), #{desc => ?DESC("password"), format => <<"password">>})}
         ] ++ emqx_connector_schema_lib:ssl_fields();
-fields(influxdb_api_v2) ->
+fields(influxdb_api_v2_token) ->
+    fields(v2_common) ++
+        [{token, mk(binary(), #{required => true, desc => ?DESC("token")})}];
+fields(influxdb_api_v2_username) ->
+    fields(v2_common) ++
+        [
+            {username, mk(binary(), #{desc => ?DESC("username")})},
+            {password, mk(binary(), #{desc => ?DESC("password"), format => <<"password">>})}
+        ];
+fields(v2_common) ->
     fields(common) ++
         [
             {bucket, mk(binary(), #{required => true, desc => ?DESC("bucket")})},
-            {org, mk(binary(), #{required => true, desc => ?DESC("org")})},
-            {token, mk(binary(), #{required => true, desc => ?DESC("token")})}
+            {org, mk(binary(), #{required => true, desc => ?DESC("org")})}
         ] ++ emqx_connector_schema_lib:ssl_fields().
 
 server(type) -> emqx_schema:ip_port();
@@ -145,7 +153,9 @@ desc(influxdb_udp) ->
     ?DESC("influxdb_udp");
 desc(influxdb_api_v1) ->
     ?DESC("influxdb_api_v1");
-desc(influxdb_api_v2) ->
+desc(influxdb_api_v2_token) ->
+    ?DESC("influxdb_api_v2");
+desc(influxdb_api_v2_username) ->
     ?DESC("influxdb_api_v2").
 
 %% -------------------------------------------------------------------------------------------------
