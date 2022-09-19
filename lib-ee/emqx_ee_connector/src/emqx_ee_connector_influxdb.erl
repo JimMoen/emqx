@@ -245,7 +245,7 @@ client_config(
         {precision, atom_to_binary(maps:get(precision, Config, ms), utf8)}
     ] ++ protocol_config(Config).
 
-%% api v2 config
+%% api v1 config
 protocol_config(#{
     username := Username,
     password := Password,
@@ -259,7 +259,7 @@ protocol_config(#{
         {password, str(Password)},
         {database, str(DB)}
     ] ++ ssl_config(SSL);
-%% api v1 config
+%% api v2 token config
 protocol_config(#{
     bucket := Bucket,
     org := Org,
@@ -272,6 +272,22 @@ protocol_config(#{
         {bucket, str(Bucket)},
         {org, str(Org)},
         {token, Token}
+    ] ++ ssl_config(SSL);
+%% api v2 username config
+protocol_config(#{
+    bucket := Bucket,
+    org := Org,
+    username := Username,
+    password := Password,
+    ssl := SSL
+}) ->
+    [
+        {protocol, http},
+        {version, v2},
+        {bucket, str(Bucket)},
+        {org, str(Org)},
+        {username, str(Username)},
+        {password, str(Password)}
     ] ++ ssl_config(SSL);
 %% udp config
 protocol_config(_) ->

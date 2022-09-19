@@ -52,7 +52,8 @@
     T == webhook;
     T == mysql;
     T == influxdb_api_v1;
-    T == influxdb_api_v2;
+    T == influxdb_api_v2_token;
+    T == influxdb_api_v2_username;
     T == influxdb_udp
 ).
 
