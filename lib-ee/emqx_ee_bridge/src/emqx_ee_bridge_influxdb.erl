@@ -190,61 +190,117 @@ write_syntax(_) ->
     undefined.
 
 to_influx_lines(RawLines) ->
-    Lines = string:tokens(str(RawLines), "\n"),
+    %% Lines = string:tokens(str(RawLines), "\n"),
+    %% TODO: \n in double quotes
     lists:reverse(lists:foldl(fun converter_influx_line/2, [], Lines)).
 
-converter_influx_line(Line, AccIn) ->
-    case string:tokens(str(Line), " ") of
-        [MeasurementAndTags, Fields, Timestamp] ->
-            {Measurement, Tags} = split_measurement_and_tags(MeasurementAndTags),
-            [
-                #{
-                    measurement => Measurement,
-                    tags => kv_pairs(Tags),
-                    fields => kv_pairs(string:tokens(Fields, ",")),
-                    timestamp => Timestamp
-                }
-                | AccIn
-            ];
-        [MeasurementAndTags, Fields] ->
-            {Measurement, Tags} = split_measurement_and_tags(MeasurementAndTags),
-            %% TODO: fix here both here and influxdb driver.
-            %% Default value should evaluated by InfluxDB.
-            [
-                #{
-                    measurement => Measurement,
-                    tags => kv_pairs(Tags),
-                    fields => kv_pairs(string:tokens(Fields, ",")),
-                    timestamp => "${timestamp}"
-                }
-                | AccIn
-            ];
-        _ ->
-            throw("Bad InfluxDB Line Protocol schema")
+converter_influx_line(Line, PointsAccIn) ->
+    %% <measurement>[,<tag_key>=<tag_value>[,<tag_key>=<tag_value>]]
+    %% <field_key>=<field_value>[,<field_key>=<field_value>] [<timestamp>]
+    [parse_line(Line) | PointsAccIn].
+
+%%     [MeasurementAndTags, Fields, Timestamp] ->
+%%         mpas:put(timestamp, Timestamp, measurement_and_tags());
+%%     [MeasurementAndTags, Fields] ->
+%%         mpas:put(timestamp, "${timestamp}", measurement_and_tags(Line))
+%% end,
+
+%% measurement(Line, PointsAccIn),
+%% case split_with_unescaped(Line, " ") of
+%%     [MeasurementAndTags, Fields, Timestamp] ->
+%%         %% case split_with(MeasurementAndTags, ",") ->
+%%         {Measurement, Tags} = measurement_and_tags(MeasurementAndTags),
+%%         [
+%%             #{
+%%                 measurement => Measurement,
+%%                 tags => kv_pairs(Tags),
+%%                 fields => kv_pairs(string:tokens(Fields, ",")),
+%%                 timestamp => Timestamp
+%%             }
+%%             | PointsAccIn
+%%         ];
+%%     [MeasurementAndTags, Fields] ->
+%%         {Measurement, Tags} = measurement_and_tags(MeasurementAndTags),
+%%         %% TODO: fix here both here and influxdb driver.
+%%         %% Default value should evaluated by InfluxDB.
+%%         [
+%%             #{
+%%                 measurement => Measurement,
+%%                 tags => kv_pairs(Tags),
+%%                 fields => kv_pairs(string:tokens(Fields, ",")),
+%%                 timestamp => "${timestamp}"
+%%             }
+%%             | PointsAccIn
+%%         ];
+%%     _ ->
+%%         throw("Bad InfluxDB Line Protocol schema")
+%% end.
+
+parse_line(Line) ->
+    NLine = re:replace(Line, " +", " ", [global, {return, binary}]),
+    %% TODO: not double quoted space. e.g. between commas and at head/tail spaces.
+    string:trim(Line, both),
+    InitPoint = #{},
+    case split_with_unescaped(NLine, " ") of
+        Parts when
+            length(Parts) > 4 orelse
+                length(Parts) < 2
+        ->
+            throw({invalid_point, more_than_there_parts});
+        Parts ->
+            measurement_and_tags(Parts, InitPoint)
     end.
 
-split_measurement_and_tags(Subject) ->
-    case string:tokens(Subject, ",") of
+measurement_and_tags([<<>> | _], _) ->
+    throw(empty_measurement);
+measurement_and_tags([MeasurementAndTags | Rest], Point) ->
+    case split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]) of
         [] ->
-            throw("Bad Measurement schema");
-        [Measurement] ->
-            {Measurement, []};
-        [Measurement | Tags] ->
-            {Measurement, Tags}
-    end.
+            ok
+    end,
+    %% [Measurement | Tags] = split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]),
+    fields(Rest, #{measurement => Measurement, tags => kv_pairs(Tags)}).
+
+fields([], _) ->
+    throw(empty_fields);
+fields([Fields | Timestamp], Point) ->
+    Point#{fields => kv_pairs(Fields), timestamp => timestamp(Timestamp)}.
+
+timestamp([]) ->
+    "${timestamp}";
+timestamp([TimeStamp]) ->
+    TimeStamp.
+
+%% measurement_and_tags(Subject) ->
+%%     case split_with_unescaped(Subject, ",") of
+%%         [] ->
+%%             throw("Bad Measurement schema");
+%%         [Measurement] ->
+%%             #{Measurement, []};
+%%         [Measurement | Tags] ->
+%%             {Measurement, Tags}
+%%     end.
 
 kv_pairs(Pairs) ->
     kv_pairs(Pairs, []).
 kv_pairs([], Acc) ->
     lists:reverse(Acc);
 kv_pairs([Pair | Rest], Acc) ->
-    case string:tokens(Pair, "=") of
+    case split_with_unescaped(Pair, "=") of
         [K, V] ->
             %% Reduplicated keys will be overwritten. Follows InfluxDB Line Protocol.
             kv_pairs(Rest, [{K, V} | Acc]);
         _ ->
             throw(io_lib:format("Bad InfluxDB Line Protocol Key Value pair: ~p", Pair))
     end.
+
+split_with_unescaped(Subject, Token) ->
+    split_with_unescaped(Subject, Token, []).
+
+split_with_unescaped(Subject, Token, Optins) ->
+    %% non escaped char.
+    RE = "(?<!\\\\)" ++ Token,
+    re:split(Subject, RE, Options).
 
 str(A) when is_atom(A) ->
     atom_to_list(A);
