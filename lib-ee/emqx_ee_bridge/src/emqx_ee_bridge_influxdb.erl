@@ -24,7 +24,7 @@
 -type write_syntax() :: list().
 -reflect_type([write_syntax/0]).
 -typerefl_from_string({write_syntax/0, ?MODULE, to_influx_lines}).
--export([to_influx_lines/1]).
+-export([to_influx_points/1]).
 
 %% -------------------------------------------------------------------------------------------------
 %% api
@@ -181,7 +181,7 @@ write_syntax(required) ->
 write_syntax(validator) ->
     [?NOT_EMPTY("the value of the field 'write_syntax' cannot be empty")];
 write_syntax(converter) ->
-    fun to_influx_lines/1;
+    fun to_influx_points/1;
 write_syntax(desc) ->
     ?DESC("write_syntax");
 write_syntax(format) ->
@@ -189,15 +189,95 @@ write_syntax(format) ->
 write_syntax(_) ->
     undefined.
 
-to_influx_lines(RawLines) ->
-    %% Lines = string:tokens(str(RawLines), "\n"),
-    %% TODO: \n in double quotes
-    lists:reverse(lists:foldl(fun converter_influx_line/2, [], Lines)).
+-spec to_influx_points(binary()) -> list(map()).
 
-converter_influx_line(Line, PointsAccIn) ->
+to_influx_points(RawLines) ->
+    lists:reverse(lists:foldl(fun parse_line/2, [], to_lines(RawLines))).
+
+to_lines(RawLines) ->
+    case re:run(RawLines, "\\\b") of
+        {match, _} ->
+            throw("Bad InfluxDB Line Protocol schema: unsupported char `backspace`");
+        no_match ->
+            ok
+    end,
+    FilterUnBlank = fun
+        (<<>>) -> false;
+        (_) -> true
+    end,
+    %% quoted string
+    RE =
+        "(\"[^\"]*\")"
+        %% or
+        "|"
+        %% newline, but enclosed in parentheses to keep it in result
+        "(\\n)"
+        %% or
+        "|"
+        %% not escaped. maybe in
+        "(?<!\\\\)"
+        %% whitespace or other non-printed chors
+        "[\s\h\f\v\t]",
+    to_lines_(lists:filter(FilterUnBlank, re:split(RawLines, RE))).
+
+%% RE = "(\"[^\"]*\")|(\\n)|(?<!\\\\)[\s\h\f\v\t]".
+
+to_lines_(Words) ->
+    to_lines_(Words, []).
+
+to_lines_([], Acc) ->
+    lists:reverse(Acc);
+to_lines_([<<"\n">> | RestWords], Acc) ->
+    to_lines_(RestWords, Acc);
+to_lines_(Words, Acc) ->
+    {Line, RestWords} = lists:splitwith(
+        fun
+            (<<"\n">>) -> false;
+            (_) -> true
+        end,
+        Words
+    ),
+    to_lines_(RestWords, [Line | Acc]).
+
+parse_line(Line, PointsAccIn) ->
     %% <measurement>[,<tag_key>=<tag_value>[,<tag_key>=<tag_value>]]
     %% <field_key>=<field_value>[,<field_key>=<field_value>] [<timestamp>]
-    [parse_line(Line) | PointsAccIn].
+    [line_to_point(Line) | PointsAccIn].
+
+line_to_point(Words) when
+    length(Words) < 2
+->
+    throw("Bad InfluxDB Line Protocol schema");
+line_to_point(Words) ->
+    measurement_and_tags(Words, #{}).
+
+measurement_and_tags([<<"\"\"">> | _], _) ->
+    %% measurement is string but empty
+    throw(empty_measurement);
+measurement_and_tags([Str = <<"\", Rest/binary">> | Rest], Acc) ->
+    fields(Rest, Acc#{measurement => Str, tags => kv_pairs()});
+measurement_and_tags([MeasurementAndTags | Rest], Point) ->
+    case split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]) of
+        [<<>> | _Rest] ->
+            throw(empty_measurement);
+        [Measurement, Tags] ->
+            fields(Rest, #{measurement => Measurement, tags => kv_pairs(Tags)})
+    end.
+%% [Measurement | Tags] = split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]),
+
+%% fields()
+
+%% line_words_to_point([IfString = <<"\", Rest/binary">> | Rest], Acc) ->
+%%     ok;
+%% line_words_to_point([MeasurementAndTags | Rest], Acc) ->
+%%     ok.
+
+%% case split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]) of
+%%     [] ->
+%%         ok
+%% end,
+%% [Measurement | Tags] = split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]),
+%% fields(Rest, #{measurement => Measurement, tags => kv_pairs(Tags)}).
 
 %%     [MeasurementAndTags, Fields, Timestamp] ->
 %%         mpas:put(timestamp, Timestamp, measurement_and_tags());
@@ -236,40 +316,42 @@ converter_influx_line(Line, PointsAccIn) ->
 %%         throw("Bad InfluxDB Line Protocol schema")
 %% end.
 
-parse_line(Line) ->
-    NLine = re:replace(Line, " +", " ", [global, {return, binary}]),
-    %% TODO: not double quoted space. e.g. between commas and at head/tail spaces.
-    string:trim(Line, both),
-    InitPoint = #{},
-    case split_with_unescaped(NLine, " ") of
-        Parts when
-            length(Parts) > 4 orelse
-                length(Parts) < 2
-        ->
-            throw({invalid_point, more_than_there_parts});
-        Parts ->
-            measurement_and_tags(Parts, InitPoint)
-    end.
+%% string_kv(<<"\", Rest/binary">>) ->
 
-measurement_and_tags([<<>> | _], _) ->
-    throw(empty_measurement);
-measurement_and_tags([MeasurementAndTags | Rest], Point) ->
-    case split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]) of
-        [] ->
-            ok
-    end,
-    %% [Measurement | Tags] = split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]),
-    fields(Rest, #{measurement => Measurement, tags => kv_pairs(Tags)}).
+%% line_words_to_point(LineWords) ->
+%%     NLine = re:replace(LineWords, " +", " ", [global, {return, binary}]),
+%%     %% TODO: not double quoted space. e.g. between commas and at head/tail spaces.
+%%     string:trim(LineWords, both),
+%%     InitPoint = #{},
+%%     case split_with_unescaped(NLine, " ") of
+%%         Parts when
+%%             length(Parts) > 4 orelse
+%%                 length(Parts) < 2
+%%         ->
+%%             throw({invalid_point, more_than_there_parts});
+%%         Parts ->
+%%             measurement_and_tags(Parts, InitPoint)
+%%     end.
 
-fields([], _) ->
-    throw(empty_fields);
-fields([Fields | Timestamp], Point) ->
-    Point#{fields => kv_pairs(Fields), timestamp => timestamp(Timestamp)}.
+%% measurement_and_tags([<<>> | _], _) ->
+%%     throw(empty_measurement);
+%% measurement_and_tags([MeasurementAndTags | Rest], Point) ->
+%%     case split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]) of
+%%         [] ->
+%%             ok
+%%     end,
+%%     %% [Measurement | Tags] = split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]),
+%%     fields(Rest, #{measurement => Measurement, tags => kv_pairs(Tags)}).
 
-timestamp([]) ->
-    "${timestamp}";
-timestamp([TimeStamp]) ->
-    TimeStamp.
+%% fields([], _) ->
+%%     throw(empty_fields);
+%% fields([Fields | Timestamp], Point) ->
+%%     Point#{fields => kv_pairs(Fields), timestamp => timestamp(Timestamp)}.
+
+%% timestamp([]) ->
+%%     "${timestamp}";
+%% timestamp([TimeStamp]) ->
+%%     TimeStamp.
 
 %% measurement_and_tags(Subject) ->
 %%     case split_with_unescaped(Subject, ",") of
