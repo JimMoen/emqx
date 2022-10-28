@@ -192,7 +192,13 @@ write_syntax(_) ->
 -spec to_influx_points(binary()) -> list(map()).
 
 to_influx_points(RawLines) ->
-    lists:reverse(lists:foldl(fun parse_line/2, [], to_lines(RawLines))).
+    Fun =
+        fun(Line, PointsAccIn) ->
+            %% <measurement>[,<tag_key>=<tag_value>[,<tag_key>=<tag_value>]]
+            %% <field_key>=<field_value>[,<field_key>=<field_value>] [<timestamp>]
+            [parse_line(Line) | PointsAccIn]
+        end,
+    lists:reverse(lists:foldl(Fun, [], to_lines(RawLines))).
 
 to_lines(RawLines) ->
     case re:run(RawLines, "\\\b") of
@@ -218,51 +224,60 @@ to_lines(RawLines) ->
         "(?<!\\\\)"
         %% whitespace or other non-printed chors
         "[\s\h\f\v\t]",
-    to_lines_(lists:filter(FilterUnBlank, re:split(RawLines, RE))).
+    to_lines_(
+        lists:filter(
+            FilterUnBlank,
+            %% write syntax phrase
+            re:split(RawLines, RE)
+        )
+    ).
 
 %% RE = "(\"[^\"]*\")|(\\n)|(?<!\\\\)[\s\h\f\v\t]".
 
-to_lines_(Words) ->
-    to_lines_(Words, []).
+to_lines_(Phrases) ->
+    to_lines_(Phrases, []).
 
 to_lines_([], Acc) ->
     lists:reverse(Acc);
-to_lines_([<<"\n">> | RestWords], Acc) ->
-    to_lines_(RestWords, Acc);
-to_lines_(Words, Acc) ->
-    {Line, RestWords} = lists:splitwith(
+to_lines_([<<"\n">> | RestPhrases], Acc) ->
+    to_lines_(RestPhrases, Acc);
+to_lines_(Phrases, Acc) ->
+    {Line, RestPhrases} = lists:splitwith(
         fun
             (<<"\n">>) -> false;
             (_) -> true
         end,
-        Words
+        Phrases
     ),
-    to_lines_(RestWords, [Line | Acc]).
+    to_lines_(RestPhrases, [Line | Acc]).
 
-parse_line(Line, PointsAccIn) ->
-    %% <measurement>[,<tag_key>=<tag_value>[,<tag_key>=<tag_value>]]
-    %% <field_key>=<field_value>[,<field_key>=<field_value>] [<timestamp>]
-    [line_to_point(Line) | PointsAccIn].
-
-line_to_point(Words) when
-    length(Words) < 2
+parse_line(Phrases) when
+    length(Phrases) < 2
 ->
     throw("Bad InfluxDB Line Protocol schema");
-line_to_point(Words) ->
-    measurement_and_tags(Words, #{}).
+parse_line(Phrases) ->
+    measurement(Phrases, #{}).
 
-measurement_and_tags([<<"\"\"">> | _], _) ->
+measurement([<<"\"\"">> | _], _) ->
     %% measurement is string but empty
     throw(empty_measurement);
-measurement_and_tags([Str = <<"\", Rest/binary">> | Rest], Acc) ->
-    fields(Rest, Acc#{measurement => Str, tags => kv_pairs()});
-measurement_and_tags([MeasurementAndTags | Rest], Point) ->
+%% double quoted measurement
+measurement([QuotedStr = <<"\", Rest/binary">> | Rest], Acc) ->
+    tags(Rest, Acc#{measurement => QuotedStr});
+measurement([MeasurementAndTags | Rest], Point) ->
     case split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]) of
         [<<>> | _Rest] ->
             throw(empty_measurement);
         [Measurement, Tags] ->
-            fields(Rest, #{measurement => Measurement, tags => kv_pairs(Tags)})
+            tags([Tags | Rest], #{measurement => Measurement})
     end.
+
+tags([Tags0 | Rest], Acc) ->
+    Acc.
+%% handle here
+
+fields(_Rest, Point) ->
+    Point.
 %% [Measurement | Tags] = split_with_unescaped(MeasurementAndTags, ",", [{parts, 2}]),
 
 %% fields()
