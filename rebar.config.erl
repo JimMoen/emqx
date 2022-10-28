@@ -171,7 +171,7 @@ warn_profile_env() ->
         false ->
             io:format(
                 standard_error,
-                "WARN: environment variable PROFILE is not set, using 'emqx-enterprise'~n",
+                "WARN: environment variable PROFILE is not set, using 'emqx'~n",
                 []
             );
         _ ->
@@ -186,7 +186,7 @@ get_edition_from_profille_env() ->
         "emqx" ++ _ ->
             ce;
         false ->
-            ee;
+            ce;
         V ->
             io:format(standard_error, "ERROR: bad_PROFILE ~p~n", [V]),
             exit(bad_PROFILE)
