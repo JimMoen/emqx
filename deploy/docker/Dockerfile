@@ -30,7 +30,7 @@ COPY --from=builder /emqx-rel/emqx /opt/emqx
 RUN ln -s /opt/emqx/bin/* /usr/local/bin/
 
 RUN apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates procps; \
+    apt-get install -y --no-install-recommends ca-certificates procps sudo tcpdump; \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/emqx
@@ -39,7 +39,8 @@ RUN groupadd -r -g 1000 emqx; \
     useradd -r -m -u 1000 -g emqx emqx; \
     chgrp -Rf emqx /opt/emqx; \
     chmod -Rf g+w /opt/emqx; \
-    chown -Rf emqx /opt/emqx
+    chown -Rf emqx /opt/emqx; \
+    echo "emqx ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers
 
 USER emqx
 
