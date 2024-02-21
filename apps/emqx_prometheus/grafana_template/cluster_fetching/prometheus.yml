@@ -1,0 +1,48 @@
+####################
+# prometheus.yaml
+# Fetching prom data form a 3-nodes-EMQX-cluster
+# Assuming nodes ips: `172.172.0.10, 172.172.0.11, 172.172.0.12`
+# And use params: `mode=all_nodes_unaggregated` to fetch cluster data
+global:
+  scrape_interval:     10s # The default scrape interval is every 10 seconds.
+  evaluation_interval: 10s # The default evaluation interval is every 10 seconds.
+  # On this machine, every time series will be exported by default.
+  external_labels:
+    monitor: 'emqx-monitor'
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  # - "first.rules"
+  # - "second.rules"
+  - "/etc/prometheus/rules/*.rules"
+# Data pull configuration
+
+scrape_configs:
+  # EMQX Stats monitoring
+  - job_name: 'emqx-stats'
+    metrics_path: /api/v5/prometheus/stats
+    params:
+      mode: ['all_nodes_unaggregated']
+    scrape_interval: 5s
+    honor_labels: true
+    static_configs:
+      - targets: [172.172.0.10:18083]
+
+  # EMQX AuthN/AuthZ monitoring
+  - job_name: 'emqx-auth'
+    metrics_path: /api/v5/prometheus/auth
+    params:
+      mode: ['all_nodes_unaggregated']
+    scrape_interval: 5s
+    honor_labels: true
+    static_configs:
+      - targets: [172.172.0.11:18083]
+
+  # EMQX Data Integration monitoring
+  - job_name: 'emqx-data-integration'
+    metrics_path: /api/v5/prometheus/data_integration
+    params:
+      mode: ['all_nodes_unaggregated']
+    scrape_interval: 5s
+    honor_labels: true
+    static_configs:
+      - targets: [172.172.0.12:18083]
