@@ -158,7 +158,6 @@
 -define(chan_terminating, chan_terminating).
 -define(RAND_CLIENTID_BYTES, 16).
 
--define(trace_publish, '$trace.publish.attrs').
 -define(trace_deliver, '$trace.deliver.attrs').
 
 -dialyzer({no_match, [shutdown/4, ensure_timer/2, interval/2]}).
