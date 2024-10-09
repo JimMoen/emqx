@@ -61,6 +61,9 @@
     Delivery :: emqx_types:delivery(),
     Res :: term().
 
+%% @doc Trace message forwarding
+%% The span `message.forward` always starts in the publisher process and ends in the subscriber process.
+%% They are logically two unrelated processes. So the SpanCtx always need to be propagated.
 -callback msg_forward(Delivery, InitAttrs, fun((Delivery) -> Res)) -> Res when
     InitAttrs :: attrs(),
     Delivery :: emqx_types:delivery(),
