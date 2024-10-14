@@ -839,8 +839,8 @@ with_channel(Fun, Args, State = #state{channel = Channel}) ->
 
 handle_outgoing(Packets, State) ->
     Res = do_handle_outgoing(Packets, State),
-    emqx_external_trace:msg_deliver(
-        ?EXT_TRACE_STOP,
+    emqx_external_trace:outgoing(
+        ?EXT_TRACE_END,
         Packets,
         _Attrs = #{}
     ),

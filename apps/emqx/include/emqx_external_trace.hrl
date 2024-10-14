@@ -35,7 +35,7 @@
 ).
 
 -define(EXT_TRACE_START, '$ext_trace_start').
--define(EXT_TRACE_STOP, '$ext_trace_stop').
+-define(EXT_TRACE_END, '$ext_trace_end').
 
 %% --------------------------------------------------------------------
 %% types
