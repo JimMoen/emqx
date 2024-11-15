@@ -22,8 +22,7 @@
 -include_lib("emqx/include/emqx_mqtt.hrl").
 -include_lib("opentelemetry/include/otel_sampler.hrl").
 -include_lib("opentelemetry_api/include/opentelemetry.hrl").
-
--define(EMQX_OTEL_SAMPLER_RULE, emqx_otel_sampler_rule).
+-include_lib("stdlib/include/ms_transform.hrl").
 
 -define(EMQX_OTEL_SAMPLE_CLIENTID, 1).
 -define(EMQX_OTEL_SAMPLE_USERNAME, 2).
@@ -42,10 +41,15 @@
 
 -export([
     init_tables/0,
-    store_rules/3,
+    store_rule/3,
     purge_rules/0,
-    get_rules/1,
-    delete_rules/1
+    get_rule/1,
+    delete_rule/1,
+    list_username_rules/0,
+    list_clientid_rules/0,
+    list_topic_name_rules/0,
+    list_topic_matching_rules/0,
+    record_count/0
 ]).
 
 %% OpenTelemetry Sampler Callback
@@ -78,29 +82,36 @@ init_tables() ->
     ok = mria:wait_for_tables(create_tables()).
 
 %% @doc Update sample rule
-%% -spec store_rules(who(), rules()) -> ok.
-store_rules({clientid, ClientId}, ShouldSample, Extra) ->
+-spec store_rule(
+    {clientid, binary()}
+    | {username, binary()}
+    | {topic_name, binary()}
+    | {topic_matching, binary()},
+    boolean(),
+    map()
+) -> ok.
+store_rule({clientid, ClientId}, ShouldSample, Extra) ->
     Record = #?EMQX_OTEL_SAMPLER_RULE{
         type = {?EMQX_OTEL_SAMPLE_CLIENTID, ClientId},
         should_sample = ShouldSample,
         extra = Extra
     },
     mria:dirty_write(Record);
-store_rules({username, Username}, ShouldSample, Extra) ->
+store_rule({username, Username}, ShouldSample, Extra) ->
     Record = #?EMQX_OTEL_SAMPLER_RULE{
         type = {?EMQX_OTEL_SAMPLE_USERNAME, Username},
         should_sample = ShouldSample,
         extra = Extra
     },
     mria:dirty_write(Record);
-store_rules({topic_name, TopicName}, ShouldSample, Extra) ->
+store_rule({topic_name, TopicName}, ShouldSample, Extra) ->
     Record = #?EMQX_OTEL_SAMPLER_RULE{
         type = {?EMQX_OTEL_SAMPLE_TOPIC_NAME, TopicName},
         should_sample = ShouldSample,
         extra = Extra
     },
     mria:dirty_write(Record);
-store_rules({topic_matching, TopicFilter}, ShouldSample, Extra) ->
+store_rule({topic_matching, TopicFilter}, ShouldSample, Extra) ->
     Record = #?EMQX_OTEL_SAMPLER_RULE{
         type = {?EMQX_OTEL_SAMPLE_TOPIC_MATCHING, TopicFilter},
         should_sample = ShouldSample,
@@ -117,29 +128,86 @@ purge_rules() ->
         mnesia:dirty_all_keys(?EMQX_OTEL_SAMPLER_RULE)
     ).
 
-get_rules({clientid, ClientId}) ->
-    do_get_rules({?EMQX_OTEL_SAMPLE_CLIENTID, ClientId});
-get_rules({username, Username}) ->
-    do_get_rules({?EMQX_OTEL_SAMPLE_USERNAME, Username});
-get_rules({topic_name, TopicName}) ->
-    do_get_rules({?EMQX_OTEL_SAMPLE_TOPIC_NAME, TopicName});
-get_rules({topic_matching, TopicFilter}) ->
-    do_get_rules({?EMQX_OTEL_SAMPLE_TOPIC_MATCHING, TopicFilter}).
+get_rule({clientid, ClientId}) ->
+    do_get_rule({?EMQX_OTEL_SAMPLE_CLIENTID, ClientId});
+get_rule({username, Username}) ->
+    do_get_rule({?EMQX_OTEL_SAMPLE_USERNAME, Username});
+get_rule({topic_name, TopicName}) ->
+    do_get_rule({?EMQX_OTEL_SAMPLE_TOPIC_NAME, TopicName});
+get_rule({topic_matching, TopicFilter}) ->
+    do_get_rule({?EMQX_OTEL_SAMPLE_TOPIC_MATCHING, TopicFilter}).
 
-do_get_rules(Key) ->
+do_get_rule(Key) ->
     case mnesia:dirty_read(?EMQX_OTEL_SAMPLER_RULE, Key) of
         [#?EMQX_OTEL_SAMPLER_RULE{should_sample = ShouldSample}] -> {ok, ShouldSample};
         [] -> not_found
     end.
 
-delete_rules({clientid, ClientId}) ->
+delete_rule({clientid, ClientId}) ->
     mria:dirty_delete(?EMQX_OTEL_SAMPLER_RULE, {?EMQX_OTEL_SAMPLE_CLIENTID, ClientId});
-delete_rules({username, Username}) ->
+delete_rule({username, Username}) ->
     mria:dirty_delete(?EMQX_OTEL_SAMPLER_RULE, {?EMQX_OTEL_SAMPLE_USERNAME, Username});
-delete_rules({topic_name, TopicName}) ->
+delete_rule({topic_name, TopicName}) ->
     mria:dirty_delete(?EMQX_OTEL_SAMPLER_RULE, {?EMQX_OTEL_SAMPLE_TOPIC_NAME, TopicName});
-delete_rules({topic_matching, TopicFilter}) ->
+delete_rule({topic_matching, TopicFilter}) ->
     mria:dirty_delete(?EMQX_OTEL_SAMPLER_RULE, {?EMQX_OTEL_SAMPLE_TOPIC_MATCHING, TopicFilter}).
+
+-spec list_clientid_rules() -> ets:match_spec().
+list_clientid_rules() ->
+    ets:fun2ms(
+        fun(
+            #?EMQX_OTEL_SAMPLER_RULE{
+                type = {?EMQX_OTEL_SAMPLE_CLIENTID, ClientId},
+                should_sample = ShouldSample
+            }
+        ) ->
+            [{clientid, ClientId}, {should_sample, ShouldSample}]
+        end
+    ).
+
+-spec list_username_rules() -> ets:match_spec().
+list_username_rules() ->
+    ets:fun2ms(
+        fun(
+            #?EMQX_OTEL_SAMPLER_RULE{
+                type = {?EMQX_OTEL_SAMPLE_USERNAME, Username},
+                should_sample = ShouldSample
+            }
+        ) ->
+            [{username, Username}, {should_sample, ShouldSample}]
+        end
+    ).
+
+-spec list_topic_name_rules() -> ets:match_spec().
+list_topic_name_rules() ->
+    ets:fun2ms(
+        fun(
+            #?EMQX_OTEL_SAMPLER_RULE{
+                type = {?EMQX_OTEL_SAMPLE_TOPIC_NAME, TopicName},
+                should_sample = ShouldSample,
+                extra = '_'
+            }
+        ) ->
+            [{topic_name, TopicName}, {should_sample, ShouldSample}]
+        end
+    ).
+
+-spec list_topic_matching_rules() -> ets:match_spec().
+list_topic_matching_rules() ->
+    ets:fun2ms(
+        fun(
+            #?EMQX_OTEL_SAMPLER_RULE{
+                type = {?EMQX_OTEL_SAMPLE_TOPIC_MATCHING, TopicFilter},
+                should_sample = ShouldSample
+            }
+        ) ->
+            [{topic_matching, TopicFilter}, {should_sample, ShouldSample}]
+        end
+    ).
+
+-spec record_count() -> non_neg_integer().
+record_count() ->
+    mnesia:table_info(?EMQX_OTEL_SAMPLER_RULE, size).
 
 %%--------------------------------------------------------------------
 %% OpenTelemetry Sampler Callback

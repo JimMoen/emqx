@@ -1,0 +1,134 @@
+emqx_otel_sampler_api {
+
+fuzzy_username.desc:
+"""Fuzzy search `username` as substring"""
+fuzzy_username.label:
+"""fuzzy_username"""
+
+fuzzy_clientid.desc:
+"""Fuzzy search `clientid` as substring"""
+fuzzy_clientid.label:
+"""fuzzy_clientid"""
+
+fuzzy_topic_name.desc:
+"""Fuzzy search `topic_name` as substring"""
+fuzzy_topic_name.label:
+"""fuzzy_topic_name"""
+
+fuzzy_topic_matching.desc:
+"""Fuzzy search `topic_matching` as substring"""
+fuzzy_topic_matching.label:
+"""fuzzy_topic_matching"""
+
+
+clientid_rules_get.desc:
+"""Show the list of sampler rules for clients"""
+clientid_rules_get.label:
+"""Show rules for clients"""
+
+clientid_rules_post.desc:
+"""Add new rule for 'clientid'"""
+clientid_rules_post.label:
+"""Add rule for 'clientid'"""
+
+clientid_get.desc:
+"""Get the sampler rule for 'clientid'"""
+clientid_get.label:
+"""Get rule for 'clientid'"""
+
+clientid_put.desc:
+"""Update the sampler rule for 'clientid'"""
+clientid_put.label:
+"""Update rule for 'clientid'"""
+
+clientid_delete.desc:
+"""Delete the sampler rule for 'clientid'"""
+clientid_delete.label:
+"""Delete rule for 'clientid'"""
+
+
+username_rules_get.desc:
+"""Show the list of sampler rules for users"""
+username_rules_get.label:
+"""Show rules for users"""
+
+username_rules_post.desc:
+"""Add new sample rule for 'username'"""
+username_rules_post.label:
+"""Add rule for 'username'"""
+
+username_get.desc:
+"""Get the sampler rule for 'username'"""
+username_get.label:
+"""Get rule for 'username'"""
+
+username_put.desc:
+"""Update the sampler rule for 'username'"""
+username_put.label:
+"""Update rule for 'username'"""
+
+username_delete.desc:
+"""Delete the sampler rule for 'username'"""
+username_delete.label:
+"""Delete rule for 'username'"""
+
+
+topic_name_rules_get.desc:
+"""Show the list of sampler rules for topics"""
+topic_name_rules_get.label:
+"""Show rules for topics"""
+
+topic_name_rules_post.desc:
+"""Add new sample rule for 'topic_name'"""
+topic_name_rules_post.label:
+"""Add rule for 'topic_name"""
+
+topic_name_get.desc:
+"""Get the sampler rule for 'topic_name'"""
+topic_name_get.label:
+"""Get rule for 'topic_name'"""
+
+topic_name_put.desc:
+"""Update the sampler rule for 'topic_name'"""
+topic_name_put.label:
+"""Update rule for 'topic_name'"""
+
+topic_name_delete.desc:
+"""Delete the sampler rule for 'topic_name'"""
+topic_name_delete.label:
+"""Delete rule for 'topic_name'"""
+
+
+topic_matching_rules_get.desc:
+"""Show the list of sampler rules for topic matching"""
+topic_matching_rules_get.label:
+"""Show rules for topic matching"""
+
+topic_matching_rules_post.desc:
+"""Add new sample rule for 'topic_matching'"""
+topic_matching_rules_post.label:
+"""Add rule for 'topic_matching"""
+
+topic_matching_get.desc:
+"""Get the sampler rule for 'topic_matching'"""
+topic_matching_get.label:
+"""Get rule for 'topic_matching'"""
+
+topic_matching_put.desc:
+"""Update the sampler rule for 'topic_matching'"""
+topic_matching_put.label:
+"""Update rule for 'topic_matching'"""
+
+topic_matching_delete.desc:
+"""Delete the sampler rule for 'topic_matching'"""
+topic_matching_delete.label:
+"""Delete rule for 'topic_matching'"""
+
+
+purge_sample_rules.desc:
+"""Purge all sample rules"""
+purge_sample_rules.label:
+"Purge Sample Rules"
+
+
+}

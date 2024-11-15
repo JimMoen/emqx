@@ -43,4 +43,8 @@
 -define(MSG_FORWARD_SPAN_NAME, 'message.forward').
 -define(MSG_HANDLE_FORWARD_SPAN_NAME, 'message.handle_forward').
 
+%% ====================
+%% OTEL sample whitelist/blacklist Table
+-define(EMQX_OTEL_SAMPLER_RULE, emqx_otel_sampler_rule).
+
 -endif.
