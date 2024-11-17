@@ -362,12 +362,12 @@ sample_by_topic_name(#{'message.topic' := TopicName}) ->
 sample_by_topic_name(_) ->
     false.
 
+-dialyzer({nowarn_function, sample_by_topic_filter/1}).
 sample_by_topic_filter(#{'message.topic' := TopicName}) ->
     case
         mnesia:dirty_match_object(#?EMQX_OTEL_SAMPLER_RULE{
             type = {?EMQX_OTEL_SAMPLE_TOPIC_MATCHING, '_'},
-            should_sample = '_',
-            extra = '_'
+            _ = '_'
         })
     of
         [] ->
@@ -386,6 +386,7 @@ read_should_sample(Key) ->
         [#?EMQX_OTEL_SAMPLER_RULE{should_sample = ShouldSample}] -> ShouldSample
     end.
 
+-dialyzer({nowarn_function, match_topic_filter/2}).
 match_topic_filter(TopicName, #?EMQX_OTEL_SAMPLER_RULE{
     type = {?EMQX_OTEL_SAMPLE_TOPIC_MATCHING, TopicFilter},
     should_sample = ShouldSample
