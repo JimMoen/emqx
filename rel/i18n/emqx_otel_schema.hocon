@@ -66,10 +66,15 @@ trace_mode.label: "Trace Mode"
 e2e_tracing_options.desc: "End-to-end tracing options"
 e2e_tracing_options.label: "End-to-End Tracing Options"
 
-e2e_attribute_meta.desc:
+e2e_attribute_meta_key.desc:
+"""Simple attribute meta key added into Span's Attributes.</br/>
+Typically set a simple and easily recognizable name or use the cluster name to identify different EMQX clusters."""
+e2e_attribute_meta_key.label: "Attribute Meta Key"
+
+e2e_attribute_meta_value.desc:
 """Simple attribute meta value added into Span's Attributes.</br/>
 Typically set a simple and easily recognizable name or use the cluster name to identify different EMQX clusters."""
-e2e_attribute_meta.label: "Attribute Meta Value"
+e2e_attribute_meta_value.label: "Attribute Meta Value"
 
 publish_response_trace_level.desc:
 """Trace level for all message exchanges during the message publishing process.<br/>

@@ -215,7 +215,8 @@ record_count() ->
 
 setup(
     #{
-        attribute_meta := MetaValue,
+        attribute_meta_key := MetaKey,
+        attribute_meta_value := MetaValue,
         samplers :=
             #{
                 event_based_samplers := EventBasedSamplers,
@@ -244,7 +245,8 @@ setup(
         event_based_samplers => EventBasedRatio,
         whitelist_based_sampler => WhiteListEnabled,
         publish_response_trace_level => QoS,
-        attribute_meta => MetaValue
+        attribute_meta_key => MetaKey,
+        attribute_meta_value => MetaValue
     },
     ?SLOG(debug, #{
         msg => "emqx_otel_sampler_setup",
@@ -267,7 +269,8 @@ should_sample(
     #{
         whitelist_based_sampler := WhiteListEnabled,
         event_based_samplers := EventBasedRatio,
-        attribute_meta := MetaValue
+        attribute_meta_key := MetaKey,
+        attribute_meta_value := MetaValue
     } = _Opts
 ) when
     SpanName =:= ?CLIENT_CONNECT_SPAN_NAME orelse
@@ -281,7 +284,7 @@ should_sample(
             decide_by_traceid_ratio(TraceId, SpanName, EventBasedRatio),
     {
         decide(Desicion),
-        #{attribute_meta => MetaValue},
+        #{MetaKey => MetaValue},
         otel_span:tracestate(otel_tracer:current_span_ctx(Ctx))
     };
 %% None Root Span, decide by Parent or Publish Response Tracing Level
@@ -292,14 +295,18 @@ should_sample(
     SpanName,
     _SpanKind,
     _Attributes,
-    #{publish_response_trace_level := QoS, attribute_meta := MetaValue} = _Opts
+    #{
+        publish_response_trace_level := QoS,
+        attribute_meta_key := MetaKey,
+        attribute_meta_value := MetaValue
+    } = _Opts
 ) ->
     Desicion =
         parent_sampled(otel_tracer:current_span_ctx(Ctx)) andalso
             match_by_span_name(SpanName, QoS),
     {
         decide(Desicion),
-        #{attribute_meta => MetaValue},
+        #{MetaKey => MetaValue},
         otel_span:tracestate(otel_tracer:current_span_ctx(Ctx))
     }.
 
