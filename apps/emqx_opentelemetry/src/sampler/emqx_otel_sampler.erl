@@ -55,7 +55,7 @@
 %% OpenTelemetry Sampler Callback
 -export([setup/1, description/1, should_sample/7]).
 
-%% 2^64 - 1
+%% 2^64 - 1 =:= (2#1 bsl 64 -1)
 -define(MAX_VALUE, 18446744073709551615).
 
 %%--------------------------------------------------------------------
@@ -234,7 +234,7 @@ setup(
                 R when R =:= 1.0 ->
                     AccIn#{Name => #{ratio => 1, id_upper => ?MAX_VALUE}};
                 R when R >= 0.0 andalso R =< 1.0 ->
-                    IdUpperBound = R * ?MAX_VALUE,
+                    IdUpperBound = trunc(R * ?MAX_VALUE),
                     AccIn#{Name => #{ratio => R, id_upper => IdUpperBound}}
             end
         end,
@@ -335,8 +335,7 @@ decide_by_traceid_ratio(TraceId, SpanName, _EventBasedRatio) ->
     case _EventBasedRatio of
         #{SpanName := #{id_upper := IdUpperBound}} ->
             Lower64Bits = TraceId band ?MAX_VALUE,
-            %% XXX: really need abs?
-            erlang:abs(Lower64Bits) =< IdUpperBound;
+            Lower64Bits =< IdUpperBound;
         _ ->
             %% not configured, always dropped.
             false
