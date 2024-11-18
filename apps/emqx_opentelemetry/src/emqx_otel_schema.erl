@@ -304,6 +304,7 @@ fields("e2e_samplers") ->
             ?HOCON(
                 ?ARRAY(?R_REF("event_based_samplers")),
                 #{
+                    desc => ?DESC(event_based_samplers),
                     default => [],
                     importance => ?IMPORTANCE_MEDIUM
                 }
@@ -343,6 +344,12 @@ desc("otel_traces") ->
     ?DESC(otel_traces);
 desc("trace_filter") ->
     ?DESC(trace_filter);
+desc("e2e_samplers") ->
+    ?DESC(e2e_samplers);
+desc("e2e_tracing_options") ->
+    ?DESC(e2e_tracing_options);
+desc("event_based_samplers") ->
+    ?DESC(event_based_samplers);
 desc(_) ->
     undefined.
 
