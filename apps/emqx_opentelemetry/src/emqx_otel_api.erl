@@ -125,11 +125,11 @@ otel_config_example() ->
                     clientid_match_rules_max => 30,
                     topic_match_rules_max => 30,
                     sample_ratio => "10%",
-                    'client.connect' => true,
-                    'client.disconnect' => true,
-                    'client.subscribe' => true,
-                    'client.unsubscribe' => true,
-                    'client.publish' => true
+                    client_connect => true,
+                    client_disconnect => true,
+                    client_subscribe => true,
+                    client_unsubscribe => true,
+                    client_publish => true
                 }
             }
         }
