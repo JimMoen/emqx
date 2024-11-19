@@ -252,15 +252,6 @@ fields("trace_filter") ->
     ];
 fields("e2e_tracing_options") ->
     [
-        {attribute_meta_key,
-            ?HOCON(
-                string(),
-                #{
-                    default => <<"cluster_meta_key">>,
-                    desc => ?DESC(e2e_attribute_meta_key),
-                    importance => ?IMPORTANCE_MEDIUM
-                }
-            )},
         {attribute_meta_value,
             ?HOCON(
                 string(),

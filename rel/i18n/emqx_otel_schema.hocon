@@ -66,13 +66,8 @@ trace_mode.label: "Trace Mode"
 e2e_tracing_options.desc: "End-to-end tracing options"
 e2e_tracing_options.label: "End-to-End Tracing Options"
 
-e2e_attribute_meta_key.desc:
-"""Simple attribute meta key added into Span's Attributes.</br/>
-Typically, set a simple and easily recognizable name or use the cluster name to identify different EMQX clusters."""
-e2e_attribute_meta_key.label: "Attribute Meta Key"
-
 e2e_attribute_meta_value.desc:
-"""Simple attribute meta value added into Span's Attributes.</br/>
+"""A meta value added into Span's Attribute. The attribute key will be <code>emqx.meta</code></br/>
 Typically, set a simple and easily recognizable name or use the cluster name to identify different EMQX clusters."""
 e2e_attribute_meta_value.label: "Attribute Meta Value"
 
