@@ -53,6 +53,7 @@
     ensure_action/2,
     ensure_action/3,
     do_update_plugin_config/3,
+    ensure_existed/1,
     sync_plugin_cluster/2
 ]).
 
@@ -259,9 +260,9 @@ schema("/plugins/cluster_sync") ->
             'requestBody' => sync_request_body(),
             responses => #{
                 204 => <<"Sync plugin successfully">>,
-                400 => <<"No such Node running.">>,
+                400 => emqx_dashboard_swagger:error_codes(['BAD_NODE', 'BAD_PLUGIN_INFO']),
                 404 => emqx_dashboard_swagger:error_codes(
-                    ['NOT_FOUND', 'FILE_NOT_EXISTED'],
+                    ['NOT_FOUND'],
                     <<"Plugin Not Found on given Node">>
                 )
             }
@@ -611,13 +612,28 @@ sync_plugin(post, #{body := Body}) ->
                 node => Node,
                 keep_namevsn => NameVsn
             }),
-            Nodes = emqx:running_nodes(),
-            _Res = emqx_mgmt_api_plugins_proto_v4:sync_plugin_cluster(
-                Nodes, Node, NameVsn
-            ),
-            {204};
-        {error, Reason} ->
-            {400, #{reason => Reason}}
+            case emqx_mgmt_api_plugins_proto_v4:ensure_existed(Node, NameVsn) of
+                ok ->
+                    case
+                        emqx_mgmt_api_plugins_proto_v4:sync_plugin_cluster(
+                            emqx:running_nodes(), Node, NameVsn
+                        )
+                    of
+                        {_Res, []} -> {204};
+                        {_Res, BadNodes} -> {400, plugin_sync_failed_msg(BadNodes)}
+                    end;
+                {error, {plugin_error, Reason}} ->
+                    {404, #{code => 'NOT_FOUND', message => Reason}};
+                Reason ->
+                    {400, #{code => 'BAD_PLUGIN_INFO', message => readable_error_msg(Reason)}}
+            end;
+        {error, {node_error, Reason}} ->
+            {400, #{code => 'BAD_NODE', reason => Reason}};
+        {error, {plugin_error, Reason}} ->
+            {404, #{
+                code => 'BAD_PLUGIN_INFO',
+                message => readable_error_msg(Reason)
+            }}
     end.
 
 %% API CallBack End
@@ -692,6 +708,14 @@ do_update_plugin_config(NameVsn, AvroJsonMap, AvroValue) ->
     %% TODO: maybe use `AvroValue` to validate config
     emqx_plugins:put_config(NameVsn, AvroJsonMap, AvroValue).
 
+%% for RPC plugin ensure existed
+-spec ensure_existed(name_vsn()) -> ok | {error, term()}.
+ensure_existed(NameVsn) ->
+    case emqx_plugins:ensure_installed(NameVsn) of
+        ok -> ok;
+        {error, _} -> {error, {plugin_error, <<"Plugin Not Found">>}}
+    end.
+
 %% for RPC plugin sync
 -spec sync_plugin_cluster(node(), name_vsn()) -> ok.
 sync_plugin_cluster(Node, NameVsn) ->
@@ -721,6 +745,17 @@ plugin_not_found_msg() ->
 
 readable_error_msg(Msg) ->
     emqx_utils:readable_error_msg(Msg).
+
+plugin_sync_failed_msg(Nodes) ->
+    #{
+        code => 'BAD_PLUGIN_INFO',
+        message => iolist_to_binary(
+            io_lib:format(
+                "Failed to sync plugin on nodes: ~p",
+                [Nodes]
+            )
+        )
+    }.
 
 parse_position(#{<<"position">> := <<"front">>}, _) ->
     front;
@@ -757,10 +792,10 @@ parse_node(NodeBin) ->
         {ok, Node} ->
             case lists:any(fun(N) -> N =:= Node end, emqx:running_nodes()) of
                 true -> {ok, Node};
-                false -> {error, node_not_running}
+                false -> {error, {node_error, <<"No such Node running">>}}
             end;
         {error, _} ->
-            {error, bad_node_name}
+            {error, {node_error, <<"Bad Nnode Name">>}}
     end.
 
 parse_name(Name) ->
