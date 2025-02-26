@@ -776,7 +776,7 @@ parse_position(#{<<"position">> := <<"after:", After/binary>>}, _Name) ->
 parse_position(Position, _) ->
     {error, iolist_to_binary(io_lib:format("~p", [Position]))}.
 
--spec parse_sync_from(binary()) -> {ok, node(), string()} | {error, term()}.
+-spec parse_sync_from(map()) -> {ok, node(), string()} | {error, term()}.
 parse_sync_from(#{<<"node">> := NodeBin, <<"name">> := NameBin}) ->
     maybe
         {ok, Node} ?= parse_node(NodeBin),
