@@ -399,6 +399,7 @@ relx_overlay(ReleaseType) ->
         {copy, "apps/emqx_auth/etc/acl.conf", "etc/acl.conf"},
         {copy, "apps/emqx_auth/etc/auth-built-in-db-bootstrap.csv",
             "etc/auth-built-in-db-bootstrap.csv"},
+        {copy, "{{base_dir}}/consolidated", "releases/{{release_version}}/consolidated"},
         {template, "bin/emqx.cmd", "bin/emqx.cmd"},
         {template, "bin/emqx_ctl.cmd", "bin/emqx_ctl.cmd"},
         {copy, "bin/nodetool", "bin/nodetool"},
