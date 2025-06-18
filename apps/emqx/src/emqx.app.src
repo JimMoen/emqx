@@ -22,7 +22,9 @@
         bcrypt,
         emqx_http_lib,
         recon,
-        os_mon
+        os_mon,
+        toml,
+        rustler
     ]},
     {mod, {emqx_app, []}},
     {env, []},
