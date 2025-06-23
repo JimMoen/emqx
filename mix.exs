@@ -164,9 +164,7 @@ defmodule EMQXUmbrella.MixProject do
       common_dep(:crc32cer),
       # transitive dependency of pulsar-client-erl, and direct dep in s3tables bridge
       common_dep(:murmerl3),
-      common_dep(:unicode_util_compat),
-      common_dep(:toml),
-      common_dep(:rustler)
+      common_dep(:unicode_util_compat)
     ]
   end
 
@@ -310,12 +308,6 @@ defmodule EMQXUmbrella.MixProject do
 
   def common_dep(:unicode_util_compat),
     do: {:unicode_util_compat, "0.7.1", override: true}
-
-  def common_dep(:toml),
-    do: {:toml, "0.7.0", manager: :rebar3}
-
-  def common_dep(:rustler),
-    do: {:rustler, "0.36.2", override: true, runtime: false, manager: :rebar3}
 
   ###############################################################################################
   # BEGIN DEPRECATED FOR MIX BLOCK

@@ -1,0 +1,15 @@
+[package]
+name = "emqx_hello"
+links= "emqx_hello"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+build-dependencies = []
+
+[lib]
+name = "emqx_hello"
+crate-type = ["dylib"]
+
+[dependencies]
+rustler = "0.36.2"
