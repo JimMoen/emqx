@@ -9,6 +9,7 @@
 -include("emqx_plugins.hrl").
 -include_lib("emqx/include/logger.hrl").
 -include_lib("snabbkaffe/include/trace.hrl").
+-include_lib("kernel/include/file.hrl").
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
@@ -62,7 +63,8 @@
     install_dir/0,
     tar_file_path/1,
     info_file_path/1,
-    plugin_dir/1
+    plugin_dir/1,
+    max_extraction_time_ms/0
 ]).
 
 %%--------------------------------------------------------------------
@@ -150,14 +152,32 @@ get_tar(NameVsn) ->
     TarGz = tar_file_path(NameVsn),
     case file:read_file(TarGz) of
         {ok, Content} ->
-            {ok, Content};
+            check_tar_binary_size(Content);
         {error, _} ->
             case create_tar(NameVsn, TarGz) of
                 ok ->
-                    file:read_file(TarGz);
+                    case file:read_file(TarGz) of
+                        {ok, Content} ->
+                            check_tar_binary_size(Content);
+                        {error, _} = Err ->
+                            Err
+                    end;
                 Err ->
                     Err
             end
+    end.
+
+check_tar_binary_size(Content) ->
+    case byte_size(Content) > max_package_size() of
+        true ->
+            {error, #{
+                msg => "package_too_large",
+                reason => package_size_limit_exceeded,
+                size => byte_size(Content),
+                limit => max_package_size()
+            }};
+        false ->
+            {ok, Content}
     end.
 
 -spec is_tar_present(name_vsn()) ->
@@ -169,13 +189,23 @@ is_tar_present(NameVsn) ->
         false -> false
     end.
 
--spec write_tar(name_vsn(), iodata()) -> ok.
+-spec write_tar(name_vsn(), iodata()) -> ok | {error, map()}.
 write_tar(NameVsn, Content) ->
-    TarFilePath = tar_file_path(NameVsn),
-    ok = filelib:ensure_dir(TarFilePath),
-    ok = file:write_file(TarFilePath, Content),
-    MD5 = emqx_utils:bin_to_hexstr(crypto:hash(md5, Content), lower),
-    ok = file:write_file(md5sum_file_path(NameVsn), MD5).
+    case iolist_size(Content) > max_package_size() of
+        true ->
+            {error, #{
+                msg => "package_too_large",
+                reason => package_size_limit_exceeded,
+                size => iolist_size(Content),
+                limit => max_package_size()
+            }};
+        false ->
+            TarFilePath = tar_file_path(NameVsn),
+            ok = filelib:ensure_dir(TarFilePath),
+            ok = file:write_file(TarFilePath, Content),
+            MD5 = emqx_utils:bin_to_hexstr(crypto:hash(md5, Content), lower),
+            ok = file:write_file(md5sum_file_path(NameVsn), MD5)
+    end.
 
 %%--------------------------------------------------------------------
 %% Plugin package extraction
@@ -183,24 +213,41 @@ write_tar(NameVsn, Content) ->
 
 install_from_local_tar(NameVsn, InstallValidator) ->
     TarGz = tar_file_path(NameVsn),
-    case erl_tar:extract(TarGz, [compressed, memory]) of
-        {ok, TarContent} ->
-            case write_tar_file_content(install_dir(), TarContent) of
-                ok ->
-                    case InstallValidator() of
-                        ok ->
-                            ok;
-                        {error, Reason} ->
-                            ?SLOG(warning, #{
-                                msg => "failed_to_read_after_install", reason => Reason
-                            }),
-                            ok = delete_tar_file_content(install_dir(), TarContent),
-                            {error, Reason}
-                    end;
-                {error, Reason} ->
-                    {error, Reason}
+    maybe
+        ok ?= check_package_file_size(TarGz),
+        ok ?= check_tar_table(TarGz),
+        {ok, TarContent} ?= extract_tarball(TarGz),
+        ok ?= check_decompressed_size(TarContent),
+        ok ?= write_tar_file_content(install_dir(), TarContent),
+        case InstallValidator() of
+            ok ->
+                ok;
+            {error, Reason} ->
+                ?SLOG(warning, #{
+                    msg => "failed_to_read_after_install", reason => Reason
+                }),
+                ok = delete_tar_file_content(install_dir(), TarContent),
+                {error, Reason}
+        end
+    end.
+
+check_package_file_size(TarGz) ->
+    case file:read_file_info(TarGz) of
+        {ok, #file_info{size = Size}} ->
+            Limit = max_package_size(),
+            case Size > Limit of
+                true ->
+                    {error, #{
+                        msg => "package_too_large",
+                        path => TarGz,
+                        reason => package_size_limit_exceeded,
+                        size => Size,
+                        limit => Limit
+                    }};
+                false ->
+                    ok
             end;
-        {error, {_, enoent}} ->
+        {error, enoent} ->
             {error, #{
                 msg => "failed_to_extract_plugin_package",
                 path => TarGz,
@@ -212,6 +259,118 @@ install_from_local_tar(NameVsn, InstallValidator) ->
                 path => TarGz,
                 reason => Reason
             }}
+    end.
+
+%% Read the tar entry table (names and metadata only, no content) and reject
+%% packages with too many entries or too-deep paths before extraction.
+check_tar_table(TarGz) ->
+    case erl_tar:table(TarGz, [compressed]) of
+        {ok, Entries} ->
+            maybe
+                ok ?= check_file_count(Entries),
+                ok ?= check_path_depth(Entries)
+            end;
+        {error, Reason} ->
+            {error, #{
+                msg => "bad_plugin_package",
+                path => TarGz,
+                reason => Reason
+            }}
+    end.
+
+check_file_count(Entries) ->
+    Count = length(Entries),
+    Limit = max_file_count(),
+    case Count > Limit of
+        true ->
+            {error, #{
+                msg => "too_many_files_in_package",
+                reason => file_count_limit_exceeded,
+                count => Count,
+                limit => Limit
+            }};
+        false ->
+            ok
+    end.
+
+check_path_depth(Entries) ->
+    Limit = max_path_depth(),
+    case lists:any(fun(Name) -> path_depth(Name) > Limit end, Entries) of
+        true ->
+            {error, #{
+                msg => "tar_entry_path_too_deep",
+                reason => path_depth_limit_exceeded,
+                limit => Limit
+            }};
+        false ->
+            ok
+    end.
+
+path_depth(Name) ->
+    length(filename:split(Name)).
+
+%% Extract in a monitored worker process so that an over-long extraction can
+%% be aborted. Returns the same error shapes as the previous direct call.
+extract_tarball(TarGz) ->
+    Timeout = max_extraction_time_ms(),
+    Parent = self(),
+    {Pid, MRef} = spawn_monitor(fun() ->
+        Result = erl_tar:extract(TarGz, [compressed, memory]),
+        Parent ! {extract_result, self(), Result}
+    end),
+    receive
+        {extract_result, Pid, Result} ->
+            erlang:demonitor(MRef, [flush]),
+            map_extract_result(TarGz, Result);
+        {'DOWN', MRef, process, Pid, Reason} ->
+            {error, #{
+                msg => "bad_plugin_package",
+                path => TarGz,
+                reason => {extract_crashed, Reason}
+            }}
+    after Timeout ->
+        exit(Pid, kill),
+        erlang:demonitor(MRef, [flush]),
+        {error, #{
+            msg => "package_extraction_timeout",
+            path => TarGz,
+            reason => extraction_time_limit_exceeded,
+            limit_ms => Timeout
+        }}
+    end.
+
+map_extract_result(_TarGz, {ok, TarContent}) ->
+    {ok, TarContent};
+map_extract_result(TarGz, {error, {_, enoent}}) ->
+    {error, #{
+        msg => "failed_to_extract_plugin_package",
+        path => TarGz,
+        reason => plugin_tarball_not_found
+    }};
+map_extract_result(TarGz, {error, Reason}) ->
+    {error, #{
+        msg => "bad_plugin_package",
+        path => TarGz,
+        reason => Reason
+    }}.
+
+check_decompressed_size(TarContent) ->
+    Limit = max_decompressed_size(),
+    Total = lists:foldl(
+        fun({_Name, Bin}, Acc) -> Acc + byte_size(Bin) end,
+        0,
+        TarContent
+    ),
+    case Total > Limit of
+        true ->
+            {error, #{
+                msg => "decompressed_content_too_large",
+                reason => decompressed_size_limit_exceeded,
+                size => Total,
+                limit => Limit
+            }};
+        false ->
+            ok
     end.
 
 -spec ensure_installed_from_tar(name_vsn(), fun(() -> ok | {error, term()})) -> ok | {error, map()}.
@@ -275,6 +434,21 @@ lib_dir(NameVsn) ->
 
 install_dir() ->
     emqx_config:get([?CONF_ROOT, install_dir], "").
+
+max_package_size() ->
+    emqx_config:get([?CONF_ROOT, package_limits, max_package_size]).
+
+max_decompressed_size() ->
+    emqx_config:get([?CONF_ROOT, package_limits, max_decompressed_size]).
+
+max_file_count() ->
+    emqx_config:get([?CONF_ROOT, package_limits, max_file_count]).
+
+max_path_depth() ->
+    emqx_config:get([?CONF_ROOT, package_limits, max_path_depth]).
+
+max_extraction_time_ms() ->
+    emqx_config:get([?CONF_ROOT, package_limits, max_extraction_time_ms]).
 
 plugin_dir(NameVsn) ->
     wrap_to_list(filename:join([install_dir(), NameVsn])).
