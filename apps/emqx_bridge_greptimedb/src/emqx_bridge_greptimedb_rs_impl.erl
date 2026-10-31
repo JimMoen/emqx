@@ -484,7 +484,12 @@ submit_async_insert(
     RemainingTables,
     ReplyFnAndArgs
 ) ->
-    case greptimedb_rs:insert_async(Client, Table, Points, ReplyFnAndArgs) of
+    %% greptimedb_rs 0.2.0 declares only `{ok, pid()}' here, but ecpool may
+    %% return transient submission errors before the callback is installed.
+    AsyncResult = erlang:apply(
+        greptimedb_rs, insert_async, [Client, Table, Points, ReplyFnAndArgs]
+    ),
+    case AsyncResult of
         {ok, _Pid} = Ok ->
             Ok;
         {error, _Reason} = Error ->
