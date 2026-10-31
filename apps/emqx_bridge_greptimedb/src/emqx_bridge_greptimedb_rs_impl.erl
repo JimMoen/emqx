@@ -211,7 +211,7 @@ on_query(
     #{?database := Database} = ConnState,
     #{ChanResId := ActionState} = InstalledChannels,
     #{?write_syntax := WriteSyntax} = ActionState,
-    #{?field_types := FieldTypes} = ActionState,
+    FieldTypes = action_field_types(ActionState),
     case parse_batch_data(ConnResId, Database, [{ChanResId, Data}], WriteSyntax, FieldTypes) of
         {ok, TablesToPoints, _Failed = []} ->
             [Result] = do_insert_sync(TablesToPoints, ConnState, [], 1),
@@ -239,7 +239,7 @@ on_query_async(
     #{?database := Database} = ConnState,
     #{ChanResId := ActionState} = InstalledChannels,
     #{?write_syntax := WriteSyntax} = ActionState,
-    #{?field_types := FieldTypes} = ActionState,
+    FieldTypes = action_field_types(ActionState),
     case parse_batch_data(ConnResId, Database, [{ChanResId, Data}], WriteSyntax, FieldTypes) of
         {ok, TablesToPoints, _Failed = []} ->
             do_insert_async(ChanResId, TablesToPoints, ConnState, ReplyFnAndArgs, [], 1);
@@ -261,7 +261,7 @@ on_batch_query(
     #{?database := Database} = ConnState,
     #{ChanResId := ActionState} = InstalledChannels,
     #{?write_syntax := WriteSyntax} = ActionState,
-    #{?field_types := FieldTypes} = ActionState,
+    FieldTypes = action_field_types(ActionState),
     case parse_batch_data(ConnResId, Database, Batch, WriteSyntax, FieldTypes) of
         {ok, TablesToPoints, Failed} ->
             do_insert_sync(TablesToPoints, ConnState, Failed, length(Batch));
@@ -289,7 +289,7 @@ on_batch_query_async(
     #{?database := Database} = ConnState,
     #{ChanResId := ActionState} = InstalledChannels,
     #{?write_syntax := WriteSyntax} = ActionState,
-    #{?field_types := FieldTypes} = ActionState,
+    FieldTypes = action_field_types(ActionState),
     case parse_batch_data(ConnResId, Database, Batch, WriteSyntax, FieldTypes) of
         {ok, TablesToPoints, Failed} ->
             do_insert_async(
@@ -311,13 +311,14 @@ on_batch_query_async(_ConnResId, Queries, _ReplyFnAndArgs, _ConnectorState) ->
 
 reply_callback(Context0, Result0) ->
     Result = normalize_insert_result(Result0),
-    #{iter := Iter0} = Context0,
+    Context = normalize_async_reply_context(Context0),
+    #{iter := Iter0} = Context,
     case maps:next(Iter0) of
         none ->
-            handle_last_async_result(Context0, Result);
+            handle_last_async_result(Context, Result);
         {NextTable, PointsWithIndices, Iter} ->
-            Context = Context0#{iter := Iter},
-            handle_async_result_continuation(Context, Result, NextTable, PointsWithIndices)
+            Context1 = Context#{iter := Iter},
+            handle_async_result_continuation(Context1, Result, NextTable, PointsWithIndices)
     end.
 
 %%------------------------------------------------------------------------------
@@ -325,6 +326,48 @@ reply_callback(Context0, Result0) ->
 %%------------------------------------------------------------------------------
 
 bin(X) -> emqx_utils_conv:bin(X).
+
+action_field_types(ActionState) ->
+    maps:get(?field_types, ActionState, #{}).
+
+normalize_async_reply_context(#{batch_size := _, last_points_by_index := _} = Context) ->
+    Context;
+normalize_async_reply_context(Context0) ->
+    #{
+        iter := Iter,
+        last_indices := LastIndices,
+        final_cont := FinalCont,
+        final_res := FinalResults,
+        client := Client
+    } = Context0,
+    #{
+        res_id => maps:get(res_id, Context0, undefined),
+        iter => Iter,
+        last_points_by_index => count_points_by_index([
+            {Index, undefined}
+         || Index <- LastIndices
+        ]),
+        final_cont => FinalCont,
+        result_acc => [{Index, 1, Result} || {Index, Result} <- FinalResults],
+        client => Client,
+        batch_size => legacy_batch_size(LastIndices, FinalResults, Iter)
+    }.
+
+legacy_batch_size(LastIndices, FinalResults, Iter) ->
+    Indices =
+        LastIndices ++
+            [Index || {Index, _Result} <- FinalResults] ++
+            legacy_remaining_indices(Iter),
+    lists:max([1 | Indices]).
+
+legacy_remaining_indices(Iter) ->
+    legacy_remaining_indices(maps:next(Iter), []).
+
+legacy_remaining_indices(none, Acc) ->
+    Acc;
+legacy_remaining_indices({_Table, PointsWithIndices, Iter}, Acc) ->
+    Indices = [Index || {Index, _Point} <- PointsWithIndices],
+    legacy_remaining_indices(maps:next(Iter), Indices ++ Acc).
 
 %% erlnif wraps NIF-side failures as `nif_error'. Normalize them for the
 %% resource buffer worker. This does not imply that other `{error, Reason}'

@@ -1247,6 +1247,61 @@ t_async_insert_treats_multiline_partial_as_success(_TCConfig) ->
         end
     ).
 
+-doc """
+Verifies that channels loaded by a pre-upgrade beam continue to work when
+their action state does not contain the new `field_types` key.
+""".
+t_legacy_channel_state_without_field_types() ->
+    [].
+t_legacy_channel_state_without_field_types(_TCConfig) ->
+    State0 = async_connector_state(<<"mqtt payload=${payload}">>),
+    #{installed_channels := InstalledChannels0} = State0,
+    ActionState = maps:remove(field_types, maps:get(channel, InstalledChannels0)),
+    State = State0#{installed_channels => #{channel => ActionState}},
+    emqx_common_test_helpers:with_mock(
+        greptimedb_rs,
+        insert,
+        fun(_Client, _Table, _Points) -> {ok, 1} end,
+        fun() ->
+            ?assertEqual(
+                {ok, 1},
+                emqx_bridge_greptimedb_rs_impl:on_query(
+                    <<"connector:test">>,
+                    {channel, async_connector_data(1)},
+                    State
+                )
+            )
+        end
+    ).
+
+-doc """
+Verifies that async replies scheduled by a pre-upgrade beam are normalized from
+the old callback context shape before they are processed by the new module.
+""".
+t_legacy_async_reply_context() ->
+    [].
+t_legacy_async_reply_context(_TCConfig) ->
+    Self = self(),
+    ReplyFnAndArgs = {fun(Result) -> Self ! {legacy_reply, Result} end, []},
+    LegacySingle = #{
+        res_id => channel,
+        iter => maps:iterator(#{}),
+        last_indices => [1],
+        final_cont => ReplyFnAndArgs,
+        final_res => [],
+        client => test_client,
+        is_batch => false
+    },
+    ok = emqx_bridge_greptimedb_rs_impl:reply_callback(LegacySingle, {ok, 1}),
+    ?assertEqual({ok, 1}, receive_reply(legacy_reply)),
+    LegacyBatch = LegacySingle#{
+        last_indices := [2],
+        final_res := [{1, {ok, 1}}],
+        is_batch := true
+    },
+    ok = emqx_bridge_greptimedb_rs_impl:reply_callback(LegacyBatch, {ok, 1}),
+    ?assertEqual([{ok, 1}, {ok, 1}], receive_reply(legacy_reply)).
+
 t_bad_timestamp() ->
     [{matrix, true}].
 t_bad_timestamp(matrix) ->
